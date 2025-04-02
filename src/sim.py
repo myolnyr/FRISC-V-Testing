@@ -10,8 +10,8 @@ from time import sleep
 FILE_WIDTH = 50
 INTERMEDIATE_EXTENSION = '.e'
 BINARY_EXTENSION = '.b'
-BIN_DIR = 'tempbin/'
-TXT_DIR = 'temptxt/'
+BIN_DIR = 'temp_bin/'
+TXT_DIR = 'temp_txt/'
 
 
 def confirm_vivado():
