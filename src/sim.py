@@ -1,3 +1,4 @@
+import random
 import subprocess
 import shutil
 import sys
@@ -237,7 +238,7 @@ def print_table(files, results, statuses, initial=False):
 
 
 def run_simulations(files, sequential, parallel_count=None):
-    statuses = {file: "Queued" for file in files}
+    statuses = {file: "Waiting" for file in files}
     results = {}
 
     print_table(files, results, statuses, initial=True)
@@ -248,7 +249,7 @@ def run_simulations(files, sequential, parallel_count=None):
             print_table(files, results, statuses)
             test_passed = run_test(file)
             results[file] = "PASS" if test_passed else "FAIL"
-            statuses[file] = "Finished"
+            statuses[file] = "Done"
             print_table(files, results, statuses)
 
     else:
@@ -279,7 +280,7 @@ def run_simulations(files, sequential, parallel_count=None):
                 try:
                     test_passed = future.result()
                     results[file] = "PASS" if test_passed else "FAIL"
-                    statuses[file] = "Finished"
+                    statuses[file] = "Done"
                 except Exception as _:
                     results[file] = "ERROR"
                     statuses[file] = "Error"
@@ -287,9 +288,9 @@ def run_simulations(files, sequential, parallel_count=None):
                 # Update the status of pending files
                 running_futures.discard(future)
 
-                # Find next queued file to mark as running
+                # Find next waiting file to mark as running
                 for f, f_file in futures.items():
-                    if f not in running_futures and statuses[f_file] == "Queued" and not f.done():
+                    if f not in running_futures and statuses[f_file] == "Waiting" and not f.done():
                         statuses[f_file] = "Running"
                         running_futures.add(f)
                         break
@@ -459,7 +460,7 @@ def get_expected_state(binary_file):
 
 def run_vivado_simulation(binary_file):
     # subprocess.run(['vivado', '-mode', 'batch', '-source', 'run_sim.tcl'])
-    sleep(4)
+    sleep(random.uniform(1, 3))
     sim_state = parse_simulation_output('sim_output.txt')
     return sim_state
 
