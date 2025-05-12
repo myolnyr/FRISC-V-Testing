@@ -7,6 +7,7 @@ import argparse
 import glob
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import sleep
+from help_formatter import TestingHelpFormatter
 
 FILE_WIDTH = 50
 INTERMEDIATE_EXTENSION = '.e'
@@ -69,53 +70,10 @@ def delete_directory(directory_name):
 
 
 def get_files_to_process():
-    # Create a custom help formatter to customize the help output
-    class CustomHelpFormatter(argparse.HelpFormatter):
-        def _format_usage(self, usage, actions, groups, prefix):
-            return """Usage: python script.py [OPTIONS]
-
-    A utility for processing and simulating files with Vivado.
-
-    File Selection Options:
-      -a, --all            Process all files with appropriate extension in current directory
-                           (default if no selection method is specified)
-      -d DIR, --dir DIR    Process all files with appropriate extension in specified directory
-      -f FILE [FILE ...], --file FILE [FILE ...]
-                           Process specific file(s)
-
-    Processing Options:
-      -s, --sequential     Run simulations sequentially instead of in parallel
-      -p N, --parallel N   Run up to N simulations in parallel (cannot be used with -s)
-      -b, --binary         Process binary (.b) files directly instead of intermediate (.e) files
-
-    General Options:
-      -h, --help           Show this help message and exit
-
-    Description:
-      This script automates the process of converting intermediate files to binary format
-      and running simulations with Vivado. It checks for Vivado installation, creates
-      temporary directories, processes the selected files, and displays simulation results
-      in a tabular format.
-
-      When using intermediate files (.e), the script first converts them to binary format
-      before simulation. When using binary files (.b), it runs simulations directly.
-
-      Results are displayed with PASS/FAIL status for each processed file.
-
-    Examples:
-      python script.py                    # Process all .e files in current directory
-      python script.py -a                 # Same as above
-      python script.py -d tests/          # Process all .e files in tests/ directory
-      python script.py -f test1.e test2.e # Process only specified files
-      python script.py -b                 # Process all .b files in current directory
-      python script.py -s -f test1.e      # Process test1.e sequentially
-      python script.py -p 2 -f test1.e test2.e test3.e # Process files with max 2 parallel simulations
-    """
-
     # Use the custom formatter when creating the parser
     parser = argparse.ArgumentParser(
         description="Process files based on command line arguments",
-        formatter_class=CustomHelpFormatter,
+        formatter_class=TestingHelpFormatter,
         add_help=True
     )
 
@@ -124,7 +82,7 @@ def get_files_to_process():
     group.add_argument('-d', '--dir', type=str, help='Process all files in specified directory')
     group.add_argument('-f', '--file', nargs='+', help='Process specific file(s)')
 
-    # Add parallel option and make it mutually exclusive with sequential
+    # Add a parallel option and make it mutually exclusive with sequential
     execution_group = parser.add_mutually_exclusive_group()
     execution_group.add_argument('-s', '--sequential', action='store_true', help="Run simulations sequentially")
     execution_group.add_argument('-p', '--parallel', type=int, metavar='N', help="Run up to N simulations in parallel")
@@ -147,7 +105,7 @@ def get_files_to_process():
         print("Error: Please use only one file selection method (-a, -d, or -f)")
         clean_up(exit_code=0)
 
-    # Check if parallel value is valid
+    # Check if the parallel value is valid
     if args.parallel is not None and args.parallel < 1:
         print("Error: Number of parallel simulations must be at least 1")
         clean_up(exit_code=0)
@@ -288,7 +246,7 @@ def run_simulations(files, sequential, parallel_count=None):
                 # Update the status of pending files
                 running_futures.discard(future)
 
-                # Find next waiting file to mark as running
+                # Find the next waiting file to mark as running
                 for f, f_file in futures.items():
                     if f not in running_futures and statuses[f_file] == "Waiting" and not f.done():
                         statuses[f_file] = "Running"
@@ -312,7 +270,7 @@ def convert_to_binary(filepath):
     with open(filepath, "r", encoding="utf-8") as zad:
         read_lines = zad.readlines()
 
-    word = [0, 0, 0, 0]
+    word = ['', '', '', '']
     flag = 0
     program = []
     new_version = True
@@ -444,7 +402,7 @@ def convert_to_binary(filepath):
 
 
 def run_reference_model(binary_file):
-    # Uses Spike to get the expected output for given binary
+    # Uses Spike to get the expected output for the given binary
     return dict()
 
 
@@ -507,10 +465,10 @@ def main():
     if not use_binary:
         print('\nConverting files to binary format...')
         for file in files:
-            print(f' - {file} ', end='')
+            print(f' - {truncate_filename(file):<{FILE_WIDTH}} ', end='')
             convert_to_binary(file)
-            print(f'DONE')
-        # Update files list to point to the generated binary files
+            print(f'\033[92mDONE\033[0m')
+        # Update the file list to point to the generated binary files
         binary_files = []
         for file in files:
             filename = os.path.basename(file)

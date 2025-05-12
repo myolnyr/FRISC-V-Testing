@@ -1,1 +1,0 @@
-clear && python sim.py -d ~/friscv/RISC-V/src/ -p 2
