@@ -137,44 +137,38 @@ if [ "$ORIGINAL_USER" != "root" ]; then
 fi
 
 # --- Automatically add RISCV and PATH exports to user's shell rc ---
-add_shell_exports() {
-    # shellcheck disable=SC2034
-    local rcfile shell profile_backup
-    # Determine which rc file to use
-    case "${SHELL##*/}" in
-      bash)   rcfile="$USER_HOME/.bashrc" ;;
-      zsh)    rcfile="$USER_HOME/.zshrc" ;;
-      *)      # fallback: try both
-              rcfile="$USER_HOME/.bashrc"
-              [ -e "$USER_HOME/.zshrc" ] && rcfile="$USER_HOME/.zshrc"
-              ;;
+print_info "Adding RISCV environment variables to user's shell config..."
+
+# Detect appropriate shell RC file
+RC_FILE=""
+if [ -n "$SUDO_USER" ]; then
+    USER_SHELL=$(getent passwd "$SUDO_USER" | cut -d: -f7)
+    case "$USER_SHELL" in
+        */zsh) RC_FILE="$USER_HOME/.zshrc" ;;
+        *)     RC_FILE="$USER_HOME/.bashrc" ;;
     esac
-
-    # Make sure the file exists
-    touch "$rcfile"
-    profile_backup="${rcfile}.$(date +%Y%m%d%H%M%S).bak"
-
-    # Back it up
-    cp "$rcfile" "$profile_backup"
-    print_info "Backed up $rcfile to $profile_backup"
-
-    # The lines we want to add
-    local line1="export RISCV=\"$INSTALL_DIR\""
-    local line2="export PATH=\"\$RISCV/bin:\$PATH\""
-
-    # Append each only if missing
-    grep -Fqx "$line1" "$rcfile" || echo -e "\n# RISC-V toolchain setup\n$line1" >> "$rcfile"
-    grep -Fqx "$line2" "$rcfile" || echo "$line2" >> "$rcfile"
-
-    print_info "Updated $rcfile with RISC-V environment variables"
-}
-
-# Call it as the original user
-if [ "$ORIGINAL_USER" != "root" ]; then
-    su - "$ORIGINAL_USER" -c add_shell_exports
 else
-    add_shell_exports
+    RC_FILE="$HOME/.bashrc"
 fi
+
+# Ensure file exists
+touch "$RC_FILE"
+
+# Backup first
+BACKUP_FILE="${RC_FILE}.$(date +%Y%m%d%H%M%S).bak"
+cp "$RC_FILE" "$BACKUP_FILE"
+print_info "Backed up $RC_FILE to $BACKUP_FILE"
+
+# Lines to add
+RISCV_EXPORT="export RISCV=\"$INSTALL_DIR\""
+PATH_EXPORT="export PATH=\"$RISCV/bin:$PATH\""
+
+# Only add if not already present
+grep -Fqx "$RISCV_EXPORT" "$RC_FILE" || echo -e "\n# RISC-V Toolchain\n$RISCV_EXPORT" >> "$RC_FILE"
+grep -Fqx "$PATH_EXPORT" "$RC_FILE" || echo "$PATH_EXPORT" >> "$RC_FILE"
+
+print_info "Updated $RC_FILE with RISC-V environment variables."
+
 
 print_info "------------------------------------------------"
 print_info "Installation complete: tools in $INSTALL_DIR"
