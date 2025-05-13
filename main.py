@@ -3,107 +3,14 @@
 # Run tests
 # Generate reports
 
-import shutil
-import subprocess
-import json
 import argparse
-import os
 from pathlib import Path
 
-
-def read_json(path: str) -> dict:
-    """
-    Read and parse a JSON configuration file.
-
-    Args:
-        path: Path to the JSON file
-
-    Returns:
-        Parsed JSON data as a dictionary
-    """
-    try:
-        with open(path, 'r') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        print(f"Error: Configuration file {path} not found.")
-        return {}
-    except json.JSONDecodeError:
-        print(f"Error: Configuration file {path} is not valid JSON.")
-        return {}
-
-
-def get_vivado_version(custom_path: str | None = None) -> str | None:
-    """
-    Get the Vivado version if installed.
-
-    Args:
-        custom_path: Optional custom path to Vivado installation
-
-    Returns:
-        Version string or None if Vivado is not found
-    """
-    if custom_path:
-        # Check if the provided custom path is valid
-        possible_cmd_path = os.path.join(custom_path, 'bin', 'vivado')
-        if os.path.exists(possible_cmd_path) and os.access(possible_cmd_path, os.X_OK):
-            vivado_cmd = possible_cmd_path
-        else:
-            print(f"Warning: Custom Vivado path {custom_path} is invalid.")
-            return None
-    else:
-        # Try to find Vivado in the system PATH
-        vivado_cmd = shutil.which('vivado')
-
-    if not vivado_cmd:
-        return None
-
-    try:
-        result = subprocess.run([vivado_cmd, '-version'], capture_output=True, text=True, check=True)
-        return result.stdout.splitlines()[0]
-    except subprocess.CalledProcessError as e:
-        print(f'Error executing Vivado: {e}')
-        return None
-
-
-def get_spike_installed(custom_path: str | None = None) -> bool:
-    """
-    Check if Spike is installed and accessible.
-
-    Args:
-        custom_path: Optional custom path to Spike installation
-
-    Returns:
-        True if Spike is installed and working, False otherwise
-    """
-    if custom_path:
-        # Check if the provided custom path is valid
-        possible_cmd_path = os.path.join(custom_path, 'spike')
-        if os.path.exists(possible_cmd_path) and os.access(possible_cmd_path, os.X_OK):
-            spike_cmd = possible_cmd_path
-        else:
-            # Try the bin subdirectory
-            possible_cmd_path = os.path.join(custom_path, 'bin', 'spike')
-            if os.path.exists(possible_cmd_path) and os.access(possible_cmd_path, os.X_OK):
-                spike_cmd = possible_cmd_path
-            else:
-                print(f"Warning: Custom Spike path {custom_path} is invalid.")
-                return False
-    else:
-        # Try to find Spike in the system PATH
-        spike_cmd = shutil.which('spike')
-
-    if not spike_cmd:
-        return False
-
-    try:
-        _ = subprocess.run([spike_cmd, '--help'], capture_output=True, text=True, check=True)
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f'Error executing Spike: {e}')
-        return False
-    except FileNotFoundError:
-        print(f'Error: Spike executable not found at {spike_cmd}')
-        return False
+from friscv_toolchain import (
+    read_json,
+    get_vivado_version,
+    get_spike_installed, compile_riscv_tests,
+)
 
 
 def parse_args() -> argparse.Namespace | None:
@@ -118,15 +25,12 @@ def parse_args() -> argparse.Namespace | None:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
-    # Core arguments
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument('--test', dest='test_path', metavar='TEST_PATH',
                              help='Path to a single test file (C or assembly) to verify')
     input_group.add_argument('--test-dir', dest='test_dir', metavar='TEST_DIR',
                              help='Directory containing test files to run (will run all compatible files)')
 
-    parser.add_argument('--mode', choices=['single', 'batch'], default='single',
-                        help='Run in single test mode or batch mode')
     parser.add_argument('--verbose', '-v', action='count', default=0,
                         help='Increase output verbosity (can be used multiple times)')
     parser.add_argument('--log-level', choices=['debug', 'info', 'warning', 'error'],
@@ -136,8 +40,8 @@ def parse_args() -> argparse.Namespace | None:
     parser.add_argument('--config', dest='config_file', metavar='CONFIG_FILE',
                         default='./config/toolchain_config.json',
                         help='Path to custom configuration file')
+    parser.add_argument('--force', action='store_true', help='Force continuation even with unsupported Vivado version')
 
-    # Tool path arguments
     tools_group = parser.add_argument_group('Tool Paths')
     tools_group.add_argument('--vivado-path', metavar='VIVADO_PATH',
                              help='Custom path to Vivado installation')
@@ -146,7 +50,6 @@ def parse_args() -> argparse.Namespace | None:
     tools_group.add_argument('--riscv-tools-path', metavar='RISCV_PATH',
                              help='Custom path to RISC-V toolchain')
 
-    # Simulation control arguments
     sim_group = parser.add_argument_group('Simulation Control')
     sim_group.add_argument('--stop-on-error', action='store_true',
                            help='Stop verification when first error is encountered')
@@ -159,7 +62,6 @@ def parse_args() -> argparse.Namespace | None:
     sim_group.add_argument('--incremental', action='store_true',
                            help='Continue from previous state for batch testing')
 
-    # Comparison arguments
     compare_group = parser.add_argument_group('Comparison Options')
     compare_group.add_argument('--compare', choices=['all', 'regs', 'pc', 'mem'],
                                default='all', help='Elements to compare between simulations')
@@ -170,7 +72,6 @@ def parse_args() -> argparse.Namespace | None:
     compare_group.add_argument('--tolerance', type=int, default=0,
                                help='Allow specified number of cycles difference')
 
-    # Output arguments
     output_group = parser.add_argument_group('Output Options')
     output_group.add_argument('--report-format', choices=['text', 'html', 'json'],
                               default='text', help='Format for verification report')
@@ -183,13 +84,11 @@ def parse_args() -> argparse.Namespace | None:
 
     args = parser.parse_args()
 
-    # Post-processing and validation of arguments
     if args.test_path:
         args.test_path = Path(args.test_path).resolve()
         if not args.test_path.exists():
             parser.error(f"Test file not found: {args.test_path}")
 
-        # Check if the file is a valid C or assembly file
         valid_extensions = ['.c', '.s', '.S', '.asm']
         if not any(args.test_path.suffix == ext for ext in valid_extensions):
             parser.error(
@@ -200,17 +99,14 @@ def parse_args() -> argparse.Namespace | None:
         if not args.test_dir.exists() or not args.test_dir.is_dir():
             parser.error(f"Test directory not found: {args.test_dir}")
 
-    # Create the output directory if it doesn't exist
     args.output_dir = Path(args.output_dir).resolve()
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Process ignore-regs to a list if provided
     if args.ignore_regs:
         args.ignore_regs = [reg.strip() for reg in args.ignore_regs.split(',')]
     else:
         args.ignore_regs = []
 
-    # Process memory regions to a list of tuples if provided
     if args.mem_regions:
         try:
             regions = []
@@ -223,13 +119,11 @@ def parse_args() -> argparse.Namespace | None:
     else:
         args.mem_regions = []
 
-    # Set up the log level based on verbosity
     verbosity_map = {
         0: 'warning',
         1: 'info',
         2: 'debug'
     }
-    # Override log_level if the verbose flag is used
     if args.verbose > 0:
         args.log_level = verbosity_map.get(min(args.verbose, 2), 'debug')
 
@@ -237,67 +131,106 @@ def parse_args() -> argparse.Namespace | None:
 
 
 def main():
-    """
-    Main function to run the verification toolchain.
-    """
     args = parse_args()
-
-    # Read configuration files
-    try:
-        vivado_config = read_json(args.config_file)
-        if not vivado_config:
-            vivado_config = read_json('./config/vivado_config.json')
-            if not vivado_config:
-                print("Error: Could not load Vivado configuration.")
-                return
-    except Exception as e:
-        print(f"Error reading configuration: {e}")
+    if not args:
         return
 
-    # Check if Vivado is installed and in system PATH or custom path
+    try:
+        toolchain_config_data = read_json(args.config_file)
+        if not toolchain_config_data:
+            default_config_path = Path(__file__).parent / 'config' / 'toolchain_config.json'
+            print(f'Trying default config: {default_config_path}')
+            toolchain_config_data = read_json(str(default_config_path))
+            if not toolchain_config_data:
+                # Try one more common default if the script is in a project root
+                default_config_path = Path('.') / 'config' / 'toolchain_config.json'
+                print(f'Trying project root config: {default_config_path.resolve()}')
+                toolchain_config_data = read_json(str(default_config_path.resolve()))
+                if not toolchain_config_data:
+                    print('Warning: Could not load toolchain configuration. Proceeding with defaults/CLI args.')
+                    toolchain_config_data = {}
+    except Exception as e:
+        print(f'Error reading toolchain configuration: {e}')
+        toolchain_config_data = {}
+
     print('Looking for Vivado...')
     vivado_version = get_vivado_version(args.vivado_path)
-
     if vivado_version is None:
-        print('Vivado is not correctly installed or not found in the specified location.')
-        print('Please make sure Vivado is installed and in the system PATH, or provide a valid path using --vivado-path.')
+        print('Vivado is not correctly installed or not found.')
         return
     else:
         print(f'Vivado found: {vivado_version}')
-
-    # Check if the Vivado version is supported
-    supported_versions = vivado_config.get('supported_versions', [])
-    if not supported_versions:
-        print("Warning: No supported Vivado versions specified in configuration.")
-    else:
-        for version in supported_versions:
-            if version in vivado_version:
-                print(f'Vivado version {version} is supported.')
-                break
-        else:
-            print(f'Warning: Vivado version {vivado_version} is not in the list of supported versions.')
-            print(f'Supported Vivado versions:')
-            for version in supported_versions:
-                print(f'  - {version}')
+        supported_versions = toolchain_config_data.get('vivado', {}).get('supported_versions', [])
+        if not any(version in vivado_version for version in supported_versions):
+            print(f'Warning: Vivado version {vivado_version} is not in the list of supported versions: {supported_versions}')
             if not args.force:
-                print("Use --force to continue anyway.")
+                print('Use --force to continue anyway. Exiting.')
                 return
+        else:
+            print('Vivado version is supported.')
 
     # Check if Spike is installed and in system PATH or custom path
     print('Looking for Spike...')
     if get_spike_installed(args.spike_path):
-        spike_path = args.spike_path if args.spike_path else "system PATH"
-        print(f'Spike is installed and accessible from {spike_path}.')
+        spike_loc = args.spike_path if args.spike_path else "system PATH"
+        print(f'Spike is installed and accessible from {spike_loc}.')
     else:
-        print('Spike is not installed or not accessible from the specified location.')
-        print('Please install Spike or provide a valid path using --spike-path.')
-        print('You can use the provided script scripts/install_spike.sh to install Spike.')
+        print('Spike is not installed or not accessible.')
         return
 
     print('\nAll dependencies are satisfied.\n')
 
-    # Continue with the main verification workflow
-    # ...
+    compiled_elf_dir = None
+    if args.test_dir:
+        print(f'Mode: Batch processing tests from directory: {args.test_dir}')
+        python_script_dir = Path(__file__).parent.resolve()
+        build_script_path = python_script_dir / 'build_scripts' / 'build-tests.sh'
+
+        if not build_script_path.is_file():
+            print(f'Error: Build script \'build-tests.sh\' not found at {build_script_path}')
+            print('Please ensure \'build-tests.sh\' is correctly located or configure its path.')
+            return
+
+        compilation_successful = compile_riscv_tests(
+            bash_script_path=build_script_path,
+            test_src_dir=args.test_dir,
+            output_base_dir=args.output_dir,
+            riscv_tools_path=args.riscv_tools_path
+        )
+
+        if not compilation_successful:
+            print('Test compilation failed. Exiting.')
+            return
+        else:
+            print(f'Compilation script finished. Check script output for details.')
+            compiled_elf_dir = args.output_dir / 'bin'
+
+    elif args.test_path:
+        print(f'Mode: Single test file: {args.test_path}')
+        if args.test_path.suffix.lower() == '.elf':
+            print(f'Using pre-compiled ELF: {args.test_path}')
+        else:
+            print('For single C/asm files, direct compilation via this script is not yet implemented.')
+            print('Please use --test-dir to compile multiple tests, or provide a pre-compiled .elf file.')
+            return
+
+    print('\nTool dependencies checked. Compilation (if applicable) handled.')
+    print(f'Main output directory for this run: {args.output_dir.resolve()}')
+    if compiled_elf_dir:
+        print(f'Compiled ELF files should be in: {compiled_elf_dir.resolve()}')
+
+    # TODO: Continue with the main verification workflow (simulation, comparison, reporting)
+    # This part would now use:
+    # - args.test_dir or args.test_path to know what to simulate.
+    # - If args.test_dir was used, iterate over ELFs in `compiled_elf_dir`.
+    # - If args.test_path (to an ELF) was used, use that ELF directly.
+    # - Spike and Vivado commands would be constructed using these ELF paths.
+    print("\nPlaceholder for: Simulation and Verification Steps")
+    # Example: if compiled_elf_dir and compiled_elf_dir.exists():
+    #    for elf_file in compiled_elf_dir.glob("*.elf"):
+    #        print(f"Simulating {elf_file.name}...")
+    #        # run_spike_simulation(elf_file, ...)
+    #        # run_vivado_simulation(elf_file, ...)
 
 
 if __name__ == "__main__":

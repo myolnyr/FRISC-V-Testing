@@ -1,1 +1,10 @@
-{}
+{
+  "vivado": {
+    "supported_versions": [
+      "2022.2"
+    ]
+  },
+  "spike": {
+
+  }
+}
