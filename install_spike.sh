@@ -130,6 +130,11 @@ SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 EOF
 chmod +x "$INSTALL_DIR/bin/rv32i-spike"
 
+# --- Create a symbolic link in /usr/bin for spike ---
+print_info "Creating symbolic link for spike in /usr/bin..."
+ln -sf "$INSTALL_DIR/bin/spike" /usr/bin/spike
+ln -sf "$INSTALL_DIR/bin/rv32i-spike" /usr/bin/rv32i-spike
+
 # Restore ownership
 if [ "$ORIGINAL_USER" != "root" ]; then
     print_info "Chowning $INSTALL_DIR back to $ORIGINAL_USER"
@@ -169,9 +174,18 @@ grep -Fqx "$PATH_EXPORT" "$RC_FILE" || echo "$PATH_EXPORT" >> "$RC_FILE"
 
 print_info "Updated $RC_FILE with RISC-V environment variables."
 
-
-print_info "------------------------------------------------"
-print_info "Installation complete: tools in $INSTALL_DIR"
-print_info "------------------------------------------------"
+# --- Make the tools available in the current terminal ---
+print_info "Making spike available in the current terminal..."
+echo ""
+echo "=================================================="
+echo "Installation complete: tools in $INSTALL_DIR"
+echo ""
+echo "Spike is now available directly from your terminal."
+echo "Try running 'spike --help' to verify."
+echo ""
+echo "The following environment variables have been set:"
+echo "RISCV=$INSTALL_DIR"
+echo "PATH includes $INSTALL_DIR/bin"
+echo "=================================================="
 
 exit 0
