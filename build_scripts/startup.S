@@ -4,7 +4,7 @@
 
 _start_asm:
     # Initialize stack pointer
-    li sp, 0x80001000
+    li sp, 0x000003FC
 
     # Clear BSS section
     la a0, _bss_start

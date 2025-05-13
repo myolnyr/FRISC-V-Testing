@@ -33,7 +33,7 @@ SECTIONS
   }
 
   .stack (NOLOAD) : {
-    . = 0x80001000;
+    . = 0x000003FC;
     _stack_top = .;
   }
 }
