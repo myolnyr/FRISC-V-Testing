@@ -18,12 +18,10 @@ def get_spike_installed(custom_path: str | None = None) -> bool:
         True if Spike is installed and working, False otherwise
     """
     if custom_path:
-        # Check if the provided custom path is valid
         possible_cmd_path = os.path.join(custom_path, 'spike')
         if os.path.exists(possible_cmd_path) and os.access(possible_cmd_path, os.X_OK):
             spike_cmd = possible_cmd_path
         else:
-            # Try the bin subdirectory
             possible_cmd_path = os.path.join(custom_path, 'bin', 'spike')
             if os.path.exists(possible_cmd_path) and os.access(possible_cmd_path, os.X_OK):
                 spike_cmd = possible_cmd_path
@@ -31,7 +29,6 @@ def get_spike_installed(custom_path: str | None = None) -> bool:
                 print(f"Warning: Custom Spike path {custom_path} is invalid.")
                 return False
     else:
-        # Try to find Spike in the system PATH
         spike_cmd = shutil.which('spike')
 
     if not spike_cmd:
