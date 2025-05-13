@@ -1,0 +1,1 @@
+python3 ./main.py --test-dir ./test_sources
