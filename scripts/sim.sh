@@ -1,1 +1,0 @@
-python ./src/friscv/testing/sim.py -d ~/friscv/RISC-V/src/ -p 2

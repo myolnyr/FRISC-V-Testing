@@ -1,5 +1,3 @@
-# Check for required dependencies --
-# Parse command-line arguments
 # Load configuration
 # Initialize components
 # Run tests
@@ -191,7 +189,7 @@ def parse_args() -> argparse.Namespace | None:
         if not args.test_path.exists():
             parser.error(f"Test file not found: {args.test_path}")
 
-        # Check if file is a valid C or assembly file
+        # Check if the file is a valid C or assembly file
         valid_extensions = ['.c', '.s', '.S', '.asm']
         if not any(args.test_path.suffix == ext for ext in valid_extensions):
             parser.error(
