@@ -9,7 +9,8 @@ from pathlib import Path
 from friscv_toolchain import (
     read_json,
     get_vivado_version,
-    get_spike_installed, compile_riscv_tests,
+    get_spike_installed,
+    compile_riscv_tests,
 )
 
 

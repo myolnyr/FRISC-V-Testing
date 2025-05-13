@@ -42,7 +42,7 @@ if [ ! -f "$STARTUP_S_FILE" ]; then
 fi
 
 # Flags for RV32I bare-metal compilation
-CFLAGS="-march=rv32i -mabi=ilp32 -nostdlib -nostartfiles -static -ffreestanding -O2"
+CFLAGS=(-march=rv32i -mabi=ilp32 -nostdlib -nostartfiles -static -ffreestanding -O2)
 LDFLAGS="-T$LINKER_SCRIPT"
 
 # Create output directories within the specified output base directory
@@ -54,7 +54,7 @@ mkdir -p "$BIN_DIR" "$HEX_DIR" "$DISASM_DIR"
 
 # Compile startup code
 echo "Compiling startup code ($STARTUP_S_FILE)..."
-$CC "$CFLAGS" -c "$STARTUP_S_FILE" -o "$BIN_DIR/startup.o"
+$CC "${CFLAGS[@]}" -c "$STARTUP_S_FILE" -o "$BIN_DIR/startup.o"
 
 # Compile and link each test
 compile_test() {
@@ -65,19 +65,19 @@ compile_test() {
     echo "Compiling $test_full_path..."
 
     # Compile C file
-    $CC "$CFLAGS" -c "$test_full_path" -o "$BIN_DIR/${output_base}".o
+    $CC "${CFLAGS[@]}" -c "$STARTUP_S_FILE" -o "$BIN_DIR/startup.o"
 
     # Link with startup code
-    $CC "$CFLAGS" "$LDFLAGS" -o "$BIN_DIR/${output_base}".elf "$BIN_DIR/startup.o" "$BIN_DIR/${output_base}".o
+    $CC "${CFLAGS[@]}" "$LDFLAGS" -o "$BIN_DIR/${output_base}.elf" "$BIN_DIR/startup.o" "$BIN_DIR/${output_base}.o"
 
     # Generate HEX file for memory initialization
-    $OBJCOPY -O verilog "$BIN_DIR/${output_base}".elf "$HEX_DIR/${output_base}".hex
+    $OBJCOPY -O verilog "$BIN_DIR/${output_base}.elf" "$HEX_DIR/${output_base}.hex"
 
     # Generate binary file
-    $OBJCOPY -O binary "$BIN_DIR/${output_base}".elf "$BIN_DIR/${output_base}".bin
+    $OBJCOPY -O binary "$BIN_DIR/${output_base}.elf" "$BIN_DIR/${output_base}.bin"
 
     # Generate disassembly for analysis
-    $OBJDUMP -d "$BIN_DIR/${output_base}".elf > "$DISASM_DIR/${output_base}".lst
+    $OBJDUMP -d "$BIN_DIR/${output_base}.elf" > "$DISASM_DIR/${output_base}.lst"
 
     echo "Built $output_base (ELF: $BIN_DIR/${output_base}.elf)"
 }
