@@ -1,8 +1,3 @@
-# Load configuration
-# Initialize components
-# Run tests
-# Generate reports
-
 import argparse
 from pathlib import Path
 
@@ -58,7 +53,7 @@ def parse_args() -> argparse.Namespace | None:
                            help='Set timeout for test execution in seconds')
     sim_group.add_argument('--max-cycles', type=int, default=10000,
                            help='Maximum number of cycles to simulate')
-    sim_group.add_argument('--start-pc', type=lambda x: int(x, 0),  # Allows 0x prefixed hex values
+    sim_group.add_argument('--start-pc', type=lambda x: int(x, 0),
                            help='Starting program counter value (default: from ELF entry point)')
     sim_group.add_argument('--incremental', action='store_true',
                            help='Continue from previous state for batch testing')
@@ -113,7 +108,7 @@ def parse_args() -> argparse.Namespace | None:
             regions = []
             for region in args.mem_regions.split(','):
                 start, end = region.split('-')
-                regions.append((int(start, 0), int(end, 0)))  # Allow hex input with 0x prefix
+                regions.append((int(start, 0), int(end, 0)))
             args.mem_regions = regions
         except ValueError:
             parser.error("Invalid memory region format. Expected format: 'start1-end1,start2-end2'")
@@ -143,7 +138,6 @@ def main():
             print(f'Trying default config: {default_config_path}')
             toolchain_config_data = read_json(str(default_config_path))
             if not toolchain_config_data:
-                # Try one more common default if the script is in a project root
                 default_config_path = Path('.') / 'config' / 'toolchain_config.json'
                 print(f'Trying project root config: {default_config_path.resolve()}')
                 toolchain_config_data = read_json(str(default_config_path.resolve()))
@@ -170,7 +164,6 @@ def main():
         else:
             print('Vivado version is supported.')
 
-    # Check if Spike is installed and in system PATH or custom path
     print('Looking for Spike...')
     if get_spike_installed(args.spike_path):
         spike_loc = args.spike_path if args.spike_path else "system PATH"
