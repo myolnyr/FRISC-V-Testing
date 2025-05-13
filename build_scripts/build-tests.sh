@@ -60,15 +60,17 @@ $CC "${CFLAGS[@]}" -c "$STARTUP_S_FILE" -o "$BIN_DIR/startup.o"
 compile_test() {
     local test_full_path=$1
     local test_file_name=$(basename "$test_full_path")
-    local output_base=$(basename "$test_file_name" .c) # Assumes .c extension for tests
+    local output_base=$(basename "$test_file_name" .c)
 
     echo "Compiling $test_full_path..."
 
-    # Compile C file
-    $CC "${CFLAGS[@]}" -c "$STARTUP_S_FILE" -o "$BIN_DIR/startup.o"
+    # ✅ Compile the actual test file
+    $CC "${CFLAGS[@]}" -c "$test_full_path" -o "$BIN_DIR/${output_base}.o"
 
     # Link with startup code
-    $CC "${CFLAGS[@]}" "$LDFLAGS" -o "$BIN_DIR/${output_base}.elf" "$BIN_DIR/startup.o" "$BIN_DIR/${output_base}.o"
+    $CC "${CFLAGS[@]}" "$LDFLAGS" -o "$BIN_DIR/${output_base}.elf" \
+        "$BIN_DIR/startup.o" "$BIN_DIR/${output_base}.o" -lgcc
+
 
     # Generate HEX file for memory initialization
     $OBJCOPY -O verilog "$BIN_DIR/${output_base}.elf" "$HEX_DIR/${output_base}.hex"
@@ -77,10 +79,11 @@ compile_test() {
     $OBJCOPY -O binary "$BIN_DIR/${output_base}.elf" "$BIN_DIR/${output_base}.bin"
 
     # Generate disassembly for analysis
-    $OBJDUMP -d "$BIN_DIR/${output_base}.elf" > "$DISASM_DIR/${output_base}.lst"
+    $OBJDUMP -d -M no-aliases,numeric "$BIN_DIR/${output_base}.elf" > "$DISASM_DIR/${output_base}.lst"
 
     echo "Built $output_base (ELF: $BIN_DIR/${output_base}.elf)"
 }
+
 
 # Compile all test files from the specified source directory
 if [ ! -d "$TEST_SRC_DIR" ]; then
