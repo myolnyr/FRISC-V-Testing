@@ -20,7 +20,7 @@ def compile_riscv_tests(
     Returns:
         True if the compilation script ran successfully (exit code 0), False otherwise.
     """
-    print(f"\n--- Starting RISC-V Test Compilation ---")
+    print(f"\n--- Starting RISC-V Test Compilation ---\n")
     print(f"Source Test Directory: {test_src_dir.resolve()}")
     print(f"Output Base Directory: {output_base_dir.resolve()}")
 
@@ -46,5 +46,5 @@ def compile_riscv_tests(
         print("RISC-V test compilation script executed successfully.")
     else:
         print("RISC-V test compilation script failed.")
-    print(f"--- Finished RISC-V Test Compilation ---\n")
+    print(f"\n--- Finished RISC-V Test Compilation ---\n")
     return success

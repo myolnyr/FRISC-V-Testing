@@ -196,7 +196,7 @@ def main():
             print('Test compilation failed. Exiting.')
             return
         else:
-            print(f'Compilation script finished. Check script output for details.')
+            print('Compilation script finished. Check script output for details.')
             compiled_elf_dir = args.output_dir / 'bin'
 
     elif args.test_path:
