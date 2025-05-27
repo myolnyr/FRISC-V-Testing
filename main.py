@@ -126,7 +126,7 @@ def parse_args() -> argparse.Namespace | None:
     return args
 
 
-def main():
+def main() -> None:
     args = parse_args()
     if not args:
         return
