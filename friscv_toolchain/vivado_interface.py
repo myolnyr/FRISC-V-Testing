@@ -7,6 +7,21 @@ import os
 import shutil
 import subprocess
 
+from .spike_interface import SpikeInterface
+
+
+class VivadoInterface:
+    def __init__(self, sim_cmd):
+        self.sim_cmd = sim_cmd
+
+
+    def step_cycle(self):
+        return {}
+    
+
+    def stop(self):
+        pass
+
 
 def get_vivado_version(custom_path: str | None = None) -> str | None:
     """
