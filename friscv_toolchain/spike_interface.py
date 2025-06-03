@@ -4,6 +4,9 @@ import shutil
 import subprocess
 import re
 import threading
+import time
+
+from .state import State
 
 
 class SpikeInterface:
@@ -15,7 +18,7 @@ class SpikeInterface:
     MEM_RE    = re.compile(r"store:\s+addr=(?P<addr>0x[0-9a-fA-F]+)\s+data=(?P<data>0x[0-9a-fA-F]+)")
 
 
-    def __init__(self, spike_path, isa, base_opts, start_pc, elf_path):
+    def __init__(self, spike_path: str, isa: str, base_opts: str, start_pc: str, elf_path: str) -> None:
         self.spike_path = spike_path
         self.isa = isa
         self.base_opts = base_opts
@@ -23,10 +26,11 @@ class SpikeInterface:
         self.elf_path = elf_path
         self.proc = None
         self._queue = queue.Queue()
-        self._thread = None
+        self._thread_stdout = None
+        self._thread_stderr = None
 
 
-    def start(self):
+    def start(self) -> None:
         cmd = [
             self.spike_path,
             '-d',
@@ -36,36 +40,78 @@ class SpikeInterface:
             '--log-commits',
             self.elf_path
         ]
+
+        print(f'Starting Spike with command {" ".join(cmd)}')
+
         self.proc = subprocess.Popen(
             cmd,
+            stdin=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            stdout=subprocess.PIPE,
             text=True,
             bufsize=1
         )
-        self._thread = threading.Thread(target=self._enqueue_output, daemon=True)
-        self._thread.start()
+
+        self._thread_stdout = threading.Thread(target=self._enqueue_stdout, daemon=True)
+        self._thread_stderr = threading.Thread(target=self._enqueue_stderr, daemon=True)
+        self._thread_stdout.start()
+        self._thread_stderr.start()
+
+        time.sleep(0.1)
+        self._send_command('run 1')
 
 
-    def _enqueue_output(self):
+    def _send_command(self, cmd: str) -> None:
+        """Send a command to the Spike process"""
+        if self.proc and self.proc.stdin:
+            print(f"Sending command: {cmd}")
+            self.proc.stdin.write(f"{cmd}\n")
+            self.proc.stdin.flush()
+
+
+    def _enqueue_stdout(self) -> None:
+        """Capture stdout output"""
+        if not self.proc or not self.proc.stdout:
+            return
+        
+        for line in self.proc.stdout:
+            line = line.strip()
+            if line:
+                print(f"STDOUT: {line}")
+                self._queue.put(('stdout', line))
+
+
+    def _enqueue_stderr(self) -> None:
+        """Capture stderr output"""
         if not self.proc or not self.proc.stderr:
             return
-
+        
         for line in self.proc.stderr:
-            self._queue.put(line.strip())
+            line = line.strip()
+            if line:
+                print(f"STDERR: {line}")
+                self._queue.put(('stderr', line))
 
-    def next_commit(self, timeout=None):
-        state = {'regs': {}, 'stores': []}
+
+    def next_commit(self, timeout=None) -> State | None:
+        state = State()
+
+        if self.proc and self.proc.stdin:
+            self.proc.stdin.write('run 1\n')
+            self.proc.stdin.flush()
+
         while True:
             try:
                 line = self._queue.get(timeout=timeout)
             except queue.Empty:
                 return None
+            
             m = self.COMMIT_RE.match(line)
             if m:
-                state['core'] = int(m.group('core'))
-                state['pc']   = m.group('pc')
-                state['inst'] = m.group('inst')
-                state['disasm'] = m.group('disasm')
+                state.core   = int(m.group('core'))
+                state.pc     = m.group('pc')
+                state.inst   = m.group('inst')
+                state.disasm = m.group('disasm')
                 break
 
         while True:
@@ -73,19 +119,22 @@ class SpikeInterface:
                 line = self._queue.get_nowait()
             except queue.Empty:
                 break
+
             mr = self.REG_RE.match(line)
             if mr:
                 reg = int(mr.group('reg'))
                 val = mr.group('val')
-                state['regs'][reg] = val
+                state.regs[reg] = val
                 continue
+
             mm = self.MEM_RE.search(line)
             if mm:
                 addr = mm.group('addr')
                 data = mm.group('data')
-                state['stores'].append((addr, data))
+                state.stores.append((addr, data))
+
         return state
-    
+
 
     def stop(self):
         if self.proc:

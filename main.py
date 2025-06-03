@@ -1,4 +1,5 @@
 import argparse
+import os
 from pathlib import Path
 
 from friscv_toolchain import (
@@ -6,6 +7,7 @@ from friscv_toolchain import (
     get_vivado_version,
     get_spike_installed,
     compile_riscv_tests,
+    SpikeInterface
 )
 
 
@@ -130,29 +132,6 @@ def main() -> None:
     args = parse_args()
     if not args:
         return
-    
-    print("""
- /$$$$$$$$ /$$$$$$$  /$$$$$$  /$$$$$$   /$$$$$$        /$$    /$$
-| $$_____/| $$__  $$|_  $$_/ /$$__  $$ /$$__  $$      | $$   | $$
-| $$      | $$  \ $$  | $$  | $$  \__/| $$  \__/      | $$   | $$
-| $$$$$   | $$$$$$$/  | $$  |  $$$$$$ | $$     /$$$$$$|  $$ / $$/
-| $$__/   | $$__  $$  | $$   \____  $$| $$    |______/ \  $$ $$/ 
-| $$      | $$  \ $$  | $$   /$$  \ $$| $$    $$        \  $$$/  
-| $$      | $$  | $$ /$$$$$$|  $$$$$$/|  $$$$$$/         \  $/   
-|__/      |__/  |__/|______/ \______/  \______/           \_/     
- _______        _   _               _______          _      _           _       
-|__   __|      | | (_)             |__   __|        | |    | |         (_)      
-   | | ___  ___| |_ _ _ __   __ _     | | ___   ___ | | ___| |__   __ _ _ _ __  
-   | |/ _ \/ __| __| | '_ \ / _` |    | |/ _ \ / _ \| |/ __| '_ \ / _` | | '_ \ 
-   | |  __/\__ \ |_| | | | | (_| |    | | (_) | (_) | | (__| | | | (_| | | | | |
-   |_|\___||___/\__|_|_| |_|\__, |    |_|\___/ \___/|_|\___|_| |_|\__,_|_|_| |_|
-                             __/ |                                              
-                            |___/                                               
-          
-By Emil Popović, 2025, created at FER.
-          
-Starting...
-          """)
 
     try:
         toolchain_config_data = read_json(args.config_file)
@@ -197,7 +176,7 @@ Starting...
 
     print('\nAll dependencies are satisfied.\n')
 
-    compiled_elf_dir = None
+    compiled_elf_dir: Path | None = None
     if args.test_dir:
         print(f'Mode: Batch processing tests from directory: {args.test_dir}')
         python_script_dir = Path(__file__).parent.resolve()
@@ -236,18 +215,59 @@ Starting...
     if compiled_elf_dir:
         print(f'Compiled ELF files should be in: {compiled_elf_dir.resolve()}')
 
-    # TODO: Continue with the main verification workflow (simulation, comparison, reporting)
-    # This part would now use:
-    # - args.test_dir or args.test_path to know what to simulate.
-    # - If args.test_dir was used, iterate over ELFs in `compiled_elf_dir`.
-    # - If args.test_path (to an ELF) was used, use that ELF directly.
-    # - Spike and Vivado commands would be constructed using these ELF paths.
-    print("\nPlaceholder for: Simulation and Verification Steps")
-    # Example: if compiled_elf_dir and compiled_elf_dir.exists():
-    #    for elf_file in compiled_elf_dir.glob("*.elf"):
-    #        print(f"Simulating {elf_file.name}...")
-    #        # run_spike_simulation(elf_file, ...)
-    #        # run_vivado_simulation(elf_file, ...)
+    print('\nStarting Spike simulation...\n')
+
+    if compiled_elf_dir is None:
+        print('No compiled ELF directory provided. Exiting.')
+        return
+    
+    spike_sims = []
+
+    for filename in os.listdir(compiled_elf_dir):
+        if filename.endswith('.elf'):
+            elf_path = compiled_elf_dir / filename
+            print(f'Found ELF file: {elf_path}')
+            spike_sims.append(
+                SpikeInterface(
+                    spike_path='spike' if args.spike_path is None else args.spike_path,
+                    isa='rv32i',
+                    base_opts='-m0x80000000:0x10000,0x20000000:0x1000',
+                    start_pc='0x80000000',
+                    elf_path=str(elf_path),
+                )
+            )
+
+    print()
+
+    for spike in sorted(spike_sims, key=lambda x: x.elf_path):
+        print(f'Start test {spike.elf_path}? (y/n) ', end='')
+        if input().strip().lower() != 'y':
+            print('Skipping test.')
+            continue
+
+        print(f'Starting Spike simulation for {spike.elf_path}...')
+        try:
+            spike.start()            
+            for i in range(10):
+                print(f'Waiting for commit {i + 1}...')
+                state = spike.next_commit(timeout=5)
+                if state is None:
+                    print('No more commits or timeout reached.')
+                    break
+
+                print(f'Commit {i + 1}: PC={state.pc}, Instruction={state.inst}, Disasm={state.disasm}')
+
+                for reg, val in state.regs.items():
+                    print(f'  x{reg} = {val:#x}')
+
+                for addr, data in state.stores:
+                    print(f'  Store: {addr:#x} -> {data:#x}')
+        
+        except Exception as e:
+            print(f'Error during simulation: {e}')
+        finally:
+            spike.stop()
+            print(f'Simulation for {spike.elf_path} completed.\n')
 
 
 if __name__ == "__main__":
